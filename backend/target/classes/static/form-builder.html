@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form Builder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Dynamic Form Builder</a>
+      <div class="nav-links">
+        <a href="/form-builder.html">Builder</a>
+        <a href="/form.html">Form</a>
+        <a href="/dashboard.html">Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h1>Dynamic Form Builder</h1>
+      <p class="small">Create a form by adding fields. Then click "Create Form" to save it.</p>
+
+      <label for="title">Form Title</label>
+      <input id="title" type="text" placeholder="Example: Event Feedback" />
+
+      <label for="ownerUser">Owner Username</label>
+      <input id="ownerUser" type="text" placeholder="Example: admin" />
+
+      <label for="ownerPass">Owner Password</label>
+      <input id="ownerPass" type="password" placeholder="Choose a password" />
+
+      <h2>Fields</h2>
+      <div id="fields"></div>
+
+      <button id="addFieldBtn" class="secondary">Add Field</button>
+      <button id="createFormBtn">Create Form</button>
+
+      <div id="result" class="small"></div>
+    </div>
+  </div>
+
+  <script>
+    const fieldsDiv = document.getElementById("fields");
+    const addFieldBtn = document.getElementById("addFieldBtn");
+    const createFormBtn = document.getElementById("createFormBtn");
+    const result = document.getElementById("result");
+
+    const TYPE_OPTIONS = [
+      { value: "short_answer", label: "Short answer" },
+      { value: "paragraph", label: "Paragraph" },
+      { value: "multiple_choice", label: "Multiple choice (radio)" },
+      { value: "checkboxes", label: "Checkboxes" },
+      { value: "dropdown", label: "Dropdown" },
+      { value: "linear_scale", label: "Linear scale" },
+      { value: "multiple_choice_grid", label: "Multiple choice grid" },
+      { value: "checkbox_grid", label: "Checkbox grid" },
+      { value: "date", label: "Date" },
+      { value: "time", label: "Time" },
+      { value: "file_upload", label: "File upload" }
+    ];
+
+    // Add a new field row
+    function addField() {
+      const wrapper = document.createElement("div");
+      wrapper.className = "card";
+
+      const typeOptionsHtml = TYPE_OPTIONS.map(t => `<option value="${t.value}">${t.label}</option>`).join("");
+
+      wrapper.innerHTML = `
+        <label>Field Label</label>
+        <input type="text" class="field-label" placeholder="Example: Rating" />
+
+        <label>Field Type</label>
+        <select class="field-type">
+          ${typeOptionsHtml}
+        </select>
+
+        <label class="row-inline"><input type="checkbox" class="field-required" /> Required</label>
+
+        <div class="options-row">
+          <label>Options (comma separated)</label>
+          <input type="text" class="field-options" placeholder="Example: Good, Average, Bad" />
+        </div>
+
+        <div class="scale-row">
+          <label>Scale Min</label>
+          <input type="number" class="scale-min" placeholder="1" />
+          <label>Scale Max</label>
+          <input type="number" class="scale-max" placeholder="5" />
+          <label>Left Label (optional)</label>
+          <input type="text" class="scale-left" placeholder="Poor" />
+          <label>Right Label (optional)</label>
+          <input type="text" class="scale-right" placeholder="Excellent" />
+        </div>
+
+        <div class="grid-row">
+          <label>Grid Rows (comma separated)</label>
+          <input type="text" class="grid-rows" placeholder="Example: Speed, Quality, Support" />
+          <label>Grid Columns (comma separated)</label>
+          <input type="text" class="grid-cols" placeholder="Example: Bad, OK, Good" />
+        </div>
+
+        <p class="small file-note">File upload stores only file names (no file contents).</p>
+      `;
+
+      fieldsDiv.appendChild(wrapper);
+      updateVisibility(wrapper);
+
+      wrapper.querySelector(".field-type").addEventListener("change", () => updateVisibility(wrapper));
+    }
+
+    function updateVisibility(wrapper) {
+      const type = wrapper.querySelector(".field-type").value;
+      const optionsRow = wrapper.querySelector(".options-row");
+      const scaleRow = wrapper.querySelector(".scale-row");
+      const gridRow = wrapper.querySelector(".grid-row");
+      const fileNote = wrapper.querySelector(".file-note");
+
+      optionsRow.style.display = ["multiple_choice", "checkboxes", "dropdown"].includes(type) ? "block" : "none";
+      scaleRow.style.display = type === "linear_scale" ? "block" : "none";
+      gridRow.style.display = ["multiple_choice_grid", "checkbox_grid"].includes(type) ? "block" : "none";
+      fileNote.style.display = type === "file_upload" ? "block" : "none";
+    }
+
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // Create a form and send to backend
+    createFormBtn.addEventListener("click", async () => {
+      result.textContent = "";
+
+      const title = document.getElementById("title").value.trim();
+      const ownerUsername = document.getElementById("ownerUser").value.trim();
+      const ownerPassword = document.getElementById("ownerPass").value.trim();
+
+      if (!title) {
+        result.textContent = "Please enter a form title.";
+        return;
+      }
+
+      if (!ownerUsername || !ownerPassword) {
+        result.textContent = "Please enter owner username and password.";
+        return;
+      }
+
+      const fieldBlocks = document.querySelectorAll("#fields .card");
+      const fields = [];
+
+      fieldBlocks.forEach(block => {
+        const label = block.querySelector(".field-label").value.trim();
+        const type = block.querySelector(".field-type").value;
+        const required = block.querySelector(".field-required").checked;
+
+        const optionsText = block.querySelector(".field-options").value.trim();
+        const options = optionsText ? optionsText.split(",").map(o => o.trim()).filter(o => o) : [];
+
+        const rowsText = block.querySelector(".grid-rows").value.trim();
+        const columnsText = block.querySelector(".grid-cols").value.trim();
+        const rows = rowsText ? rowsText.split(",").map(o => o.trim()).filter(o => o) : [];
+        const columns = columnsText ? columnsText.split(",").map(o => o.trim()).filter(o => o) : [];
+
+        const min = block.querySelector(".scale-min").value;
+        const max = block.querySelector(".scale-max").value;
+        const leftLabel = block.querySelector(".scale-left").value.trim();
+        const rightLabel = block.querySelector(".scale-right").value.trim();
+
+        if (label) {
+          fields.push({
+            label,
+            type,
+            required,
+            options,
+            rows,
+            columns,
+            min: min ? Number(min) : null,
+            max: max ? Number(max) : null,
+            leftLabel,
+            rightLabel
+          });
+        }
+      });
+
+      if (fields.length === 0) {
+        result.textContent = "Please add at least one field with a label.";
+        return;
+      }
+
+      const formData = { title, fields, ownerUsername, ownerPassword };
+
+      try {
+        const res = await fetch("/create-form", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData)
+        });
+
+        if (!res.ok) {
+          result.textContent = "Failed to create form.";
+          return;
+        }
+
+        const saved = await res.json();
+        const shareLink = window.location.origin + saved.shareUrl;
+        const ownerLink = window.location.origin + saved.ownerUrl;
+
+        result.innerHTML = `
+          <div><strong>Form created!</strong></div>
+          <div>Form ID: ${saved.formId}</div>
+          <div>Share this link (public): <a href="${saved.shareUrl}">${shareLink}</a></div>
+          <div><button id="copyShare" class="secondary">Copy Share Link</button></div>
+          <div>Owner dashboard link (private): <a href="${saved.ownerUrl}">${ownerLink}</a></div>
+          <div><button id="copyOwner" class="secondary">Copy Owner Link</button></div>
+          <div class="small">Keep the owner link private. Use username/password to view responses.</div>
+        `;
+
+        document.getElementById("copyShare").addEventListener("click", async () => {
+          const ok = await copyText(shareLink);
+          alert(ok ? "Share link copied." : "Copy failed.");
+        });
+
+        document.getElementById("copyOwner").addEventListener("click", async () => {
+          const ok = await copyText(ownerLink);
+          alert(ok ? "Owner link copied." : "Copy failed.");
+        });
+      } catch (err) {
+        result.textContent = "Error connecting to backend.";
+      }
+    });
+
+    // Start with one field by default
+    addField();
+  </script>
+</body>
+</html>

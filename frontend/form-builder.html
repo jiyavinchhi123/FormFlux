@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form Builder</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <img src="FormFlux.png" alt="FormFlux logo" class="logo" />
+      </a>
+      <div class="nav-links">
+        <a href="form-builder.html">Builder</a>
+        <a href="form.html">Form</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container form-narrow">
+    <div class="header">
+      <h1 class="section-title">Create New Form</h1>
+      <p class="section-sub">Build dynamic forms with multiple field types.</p>
+    </div>
+
+    <div class="card">
+      <label for="formTitle">Form Title</label>
+      <input id="formTitle" class="input-narrow" type="text" placeholder="Example: Event Feedback" />
+
+      <label for="ownerUser">Owner Username</label>
+      <input id="ownerUser" class="input-narrow" type="text" placeholder="Example: admin" />
+
+      <label for="ownerPass">Owner Password</label>
+      <input id="ownerPass" class="input-narrow" type="password" placeholder="Choose a password" />
+    </div>
+
+    <div class="card">
+      <h3 class="card-title">Fields</h3>
+      <div id="fields"></div>
+      <button id="addFieldBtn" class="secondary">+ Add Field</button>
+    </div>
+
+    <div class="card">
+      <button id="createFormBtn">Create Form</button>
+      <div id="result" class="small"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>© 2026 FormFlux</span>
+    </div>
+  </footer>
+
+  <script>
+    const fieldsDiv = document.getElementById("fields");
+    const addFieldBtn = document.getElementById("addFieldBtn");
+    const createFormBtn = document.getElementById("createFormBtn");
+    const result = document.getElementById("result");
+
+    const TYPE_OPTIONS = [
+      { value: "text", label: "Text" },
+      { value: "number", label: "Number" },
+      { value: "radio", label: "Radio" },
+      { value: "checkbox", label: "Checkbox" },
+      { value: "dropdown", label: "Dropdown" },
+      { value: "paragraph", label: "Paragraph" },
+      { value: "date", label: "Date" },
+      { value: "time", label: "Time" }
+    ];
+
+    function addField() {
+      const card = document.createElement("div");
+      card.className = "field-card";
+
+      const typeOptionsHtml = TYPE_OPTIONS.map(t => `<option value="${t.value}">${t.label}</option>`).join("");
+
+      card.innerHTML = `
+        <label>Field Label</label>
+        <input class="field-label" type="text" placeholder="Enter field name" />
+
+        <label>Field Type</label>
+        <select class="field-type">
+          ${typeOptionsHtml}
+        </select>
+
+        <label class="row-inline"><input type="checkbox" class="field-required" /> Required</label>
+
+        <div class="options-box" style="display:none;">
+          <label>Options (comma separated)</label>
+          <input class="field-options" type="text" placeholder="Option1, Option2" />
+        </div>
+
+        <div class="scale-box" style="display:none;">
+          <label>Scale Min</label>
+          <input class="scale-min" type="number" placeholder="1" />
+          <label>Scale Max</label>
+          <input class="scale-max" type="number" placeholder="5" />
+          <label>Left Label (optional)</label>
+          <input class="scale-left" type="text" placeholder="Poor" />
+          <label>Right Label (optional)</label>
+          <input class="scale-right" type="text" placeholder="Excellent" />
+        </div>
+
+        <div class="grid-box" style="display:none;">
+          <label>Grid Rows (comma separated)</label>
+          <input class="grid-rows" type="text" placeholder="Speed, Quality, Support" />
+          <label>Grid Columns (comma separated)</label>
+          <input class="grid-cols" type="text" placeholder="Bad, OK, Good" />
+        </div>
+
+        <div class="field-actions">
+          <button class="remove-btn secondary">Remove</button>
+        </div>
+      `;
+
+      const typeSelect = card.querySelector(".field-type");
+      const optionsBox = card.querySelector(".options-box");
+      const scaleBox = card.querySelector(".scale-box");
+      const gridBox = card.querySelector(".grid-box");
+      const removeBtn = card.querySelector(".remove-btn");
+
+      function updateVisibility() {
+        const type = typeSelect.value;
+        optionsBox.style.display = ["radio", "checkbox", "dropdown"].includes(type) ? "block" : "none";
+        scaleBox.style.display = "none";
+        gridBox.style.display = "none";
+      }
+
+      typeSelect.addEventListener("change", updateVisibility);
+      removeBtn.addEventListener("click", () => card.remove());
+
+      updateVisibility();
+      fieldsDiv.appendChild(card);
+    }
+
+    addFieldBtn.addEventListener("click", addField);
+
+    createFormBtn.addEventListener("click", async () => {
+      result.textContent = "";
+      const title = document.getElementById("formTitle").value.trim();
+      const ownerUsername = document.getElementById("ownerUser").value.trim();
+      const ownerPassword = document.getElementById("ownerPass").value.trim();
+
+      if (!title || !ownerUsername || !ownerPassword) {
+        result.textContent = "Please fill all fields (title + owner credentials).";
+        return;
+      }
+
+      const fieldCards = document.querySelectorAll(".field-card");
+      const fields = [];
+
+      fieldCards.forEach(card => {
+        const label = card.querySelector(".field-label").value.trim();
+        const type = card.querySelector(".field-type").value;
+        const required = card.querySelector(".field-required").checked;
+        const optionsText = card.querySelector(".field-options").value.trim();
+        const options = optionsText ? optionsText.split(",").map(o => o.trim()).filter(Boolean) : [];
+
+        const rows = [];
+        const columns = [];
+        const min = null;
+        const max = null;
+        const leftLabel = "";
+        const rightLabel = "";
+
+        if (label) {
+          fields.push({
+            label,
+            type,
+            required,
+            options,
+            rows,
+            columns,
+            min: min ? Number(min) : null,
+            max: max ? Number(max) : null,
+            leftLabel,
+            rightLabel
+          });
+        }
+      });
+
+      if (fields.length === 0) {
+        result.textContent = "Add at least one field.";
+        return;
+      }
+
+      try {
+        const res = await fetch("http://localhost:8080/create-form", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, fields, ownerUsername, ownerPassword })
+        });
+
+        if (!res.ok) {
+          result.textContent = "Failed to create form.";
+          return;
+        }
+
+        const saved = await res.json();
+        const base = window.location.origin + window.location.pathname.replace("form-builder.html", "");
+        const shareUrl = `${base}form.html?id=${saved.formId}`;
+        const ownerUrl = `${base}dashboard.html?id=${saved.formId}`;
+
+        result.innerHTML = `
+          <div class="success-box">
+            <div class="success-title">Form created successfully!</div>
+            <div class="success-row">
+              <span>Share Link</span>
+              <a href="${shareUrl}">Open Form</a>
+              <button class="secondary copy-btn" data-copy="${shareUrl}">Copy</button>
+            </div>
+            <div class="success-row">
+              <span>Owner Link</span>
+              <a href="${ownerUrl}">Open Dashboard</a>
+              <button class="secondary copy-btn" data-copy="${ownerUrl}">Copy</button>
+            </div>
+          </div>
+        `;
+
+        result.querySelectorAll(".copy-btn").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(btn.dataset.copy);
+              btn.textContent = "Copied!";
+              setTimeout(() => (btn.textContent = "Copy"), 1200);
+            } catch (e) {
+              btn.textContent = "Failed";
+              setTimeout(() => (btn.textContent = "Copy"), 1200);
+            }
+          });
+        });
+      } catch (err) {
+        result.textContent = "Error connecting to backend.";
+      }
+    });
+
+    addField();
+  </script>
+</body>
+</html>

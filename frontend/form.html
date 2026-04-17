@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fill Form</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <img src="FormFlux.png" alt="FormFlux logo" class="logo" />
+      </a>
+      <div class="nav-links">
+        <a href="form-builder.html">Builder</a>
+        <a href="form.html">Form</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container form-narrow">
+    <div class="header">
+      <h1 id="formTitle">Form</h1>
+      <p class="small">Fill the form and submit your response.</p>
+    </div>
+
+    <div class="card" id="formCard">
+      <form id="dynamicForm"></form>
+      <button id="submitBtn">Submit Response</button>
+      <p id="message" class="small"></p>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>© 2026 FormFlux</span>
+    </div>
+  </footer>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get("id");
+    const formTitle = document.getElementById("formTitle");
+    const dynamicForm = document.getElementById("dynamicForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const message = document.getElementById("message");
+
+    let currentForm = null;
+
+    async function loadForm() {
+      if (!formId) {
+        message.textContent = "Form ID not found in URL.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`http://localhost:8080/form/${formId}`);
+        if (!res.ok) {
+          message.textContent = "Form not found.";
+          return;
+        }
+
+        const form = await res.json();
+        currentForm = form;
+        formTitle.textContent = form.title;
+
+        form.fields.forEach((field, index) => {
+          const wrapper = document.createElement("div");
+          wrapper.className = "field-card";
+
+          const label = document.createElement("label");
+          label.textContent = field.label + (field.required ? " *" : "");
+          wrapper.appendChild(label);
+
+          renderField(wrapper, field, index);
+          dynamicForm.appendChild(wrapper);
+        });
+      } catch (err) {
+        message.textContent = "Error connecting to backend.";
+      }
+    }
+
+    function renderField(wrapper, field, index) {
+      const type = field.type;
+      const name = `field-${index}`;
+
+      if (type === "text") {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.name = name;
+        wrapper.appendChild(input);
+      } else if (type === "paragraph") {
+        const textarea = document.createElement("textarea");
+        textarea.name = name;
+        wrapper.appendChild(textarea);
+      } else if (type === "radio") {
+        (field.options || []).forEach(opt => {
+          const row = document.createElement("div");
+          row.className = "option-row";
+          const input = document.createElement("input");
+          input.type = "radio";
+          input.name = name;
+          input.value = opt;
+          const span = document.createElement("span");
+          span.textContent = " " + opt;
+          row.appendChild(input);
+          row.appendChild(span);
+          wrapper.appendChild(row);
+        });
+      } else if (type === "checkbox") {
+        (field.options || []).forEach(opt => {
+          const row = document.createElement("div");
+          row.className = "option-row";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.name = name;
+          input.value = opt;
+          const span = document.createElement("span");
+          span.textContent = " " + opt;
+          row.appendChild(input);
+          row.appendChild(span);
+          wrapper.appendChild(row);
+        });
+      } else if (type === "dropdown") {
+        const select = document.createElement("select");
+        select.name = name;
+        (field.options || []).forEach(opt => {
+          const option = document.createElement("option");
+          option.value = opt;
+          option.textContent = opt;
+          select.appendChild(option);
+        });
+        wrapper.appendChild(select);
+      } else if (type === "date") {
+        const input = document.createElement("input");
+        input.type = "date";
+        input.name = name;
+        wrapper.appendChild(input);
+      } else if (type === "time") {
+        const input = document.createElement("input");
+        input.type = "time";
+        input.name = name;
+        wrapper.appendChild(input);
+      } else if (type === "number") {
+        const input = document.createElement("input");
+        input.type = "number";
+        input.name = name;
+        wrapper.appendChild(input);
+      }
+    }
+
+    function buildGrid(field, index, isCheckbox) {
+      const table = document.createElement("table");
+      table.className = "table";
+      const thead = document.createElement("thead");
+      const headRow = document.createElement("tr");
+      headRow.appendChild(document.createElement("th"));
+
+      (field.columns || []).forEach(col => {
+        const th = document.createElement("th");
+        th.textContent = col;
+        headRow.appendChild(th);
+      });
+
+      thead.appendChild(headRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      (field.rows || []).forEach((rowLabel, rIndex) => {
+        const tr = document.createElement("tr");
+        const rowHead = document.createElement("td");
+        rowHead.textContent = rowLabel;
+        tr.appendChild(rowHead);
+
+        (field.columns || []).forEach(col => {
+          const td = document.createElement("td");
+          const input = document.createElement("input");
+          input.type = isCheckbox ? "checkbox" : "radio";
+          input.name = `field-${index}-row-${rIndex}`;
+          input.value = col;
+          td.appendChild(input);
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      return table;
+    }
+
+    submitBtn.addEventListener("click", async () => {
+      if (!currentForm) return;
+      const responses = {};
+      const errors = [];
+
+      currentForm.fields.forEach((field, index) => {
+        const type = field.type;
+        const name = `field-${index}`;
+
+        if (type === "text" || type === "paragraph" || type === "date" || type === "time") {
+          const input = dynamicForm.querySelector(`[name='${name}']`);
+          const value = input ? input.value : "";
+          if (field.required && !value) errors.push(field.label);
+          responses[field.label] = value;
+        } else if (type === "dropdown") {
+          const select = dynamicForm.querySelector(`[name='${name}']`);
+          const val = select ? select.value : "";
+          if (field.required && !val) errors.push(field.label);
+          responses[field.label] = val;
+        } else if (type === "radio") {
+          const checked = dynamicForm.querySelector(`input[name='${name}']:checked`);
+          const value = checked ? checked.value : "";
+          if (field.required && !value) errors.push(field.label);
+          responses[field.label] = value;
+        } else if (type === "checkbox") {
+          const checked = Array.from(dynamicForm.querySelectorAll(`input[name='${name}']:checked`)).map(i => i.value);
+          if (field.required && checked.length === 0) errors.push(field.label);
+          responses[field.label] = checked;
+        } else if (type === "number") {
+          const input = dynamicForm.querySelector(`[name='${name}']`);
+          let value = input ? input.value : "";
+          if (type === "number" && value !== "") value = Number(value);
+          if (field.required && !value) errors.push(field.label);
+          responses[field.label] = value;
+        }
+      });
+
+      if (errors.length > 0) {
+        message.textContent = "Please fill required fields: " + errors.join(", ");
+        return;
+      }
+
+      try {
+        const res = await fetch(`http://localhost:8080/submit/${formId}` , {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ responses })
+        });
+
+        if (!res.ok) {
+          message.textContent = "Failed to submit response.";
+          return;
+        }
+
+        message.textContent = "Response submitted successfully!";
+      } catch (err) {
+        message.textContent = "Error connecting to backend.";
+      }
+    });
+
+    loadForm();
+  </script>
+</body>
+</html>

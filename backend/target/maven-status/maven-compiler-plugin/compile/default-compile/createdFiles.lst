@@ -1,0 +1,10 @@
+com\example\dynamicform\DynamicFormApplication.class
+com\example\dynamicform\controller\FormController.class
+com\example\dynamicform\controller\FormController$PublicForm.class
+com\example\dynamicform\repository\ResponseRepository.class
+com\example\dynamicform\controller\FormController$CreateFormResponse.class
+com\example\dynamicform\controller\FormController$OwnerKeyResponse.class
+com\example\dynamicform\model\Field.class
+com\example\dynamicform\model\Response.class
+com\example\dynamicform\repository\FormRepository.class
+com\example\dynamicform\model\Form.class

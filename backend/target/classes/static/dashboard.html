@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Response Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="/">Dynamic Form Builder</a>
+      <div class="nav-links">
+        <a href="/form-builder.html">Builder</a>
+        <a href="/form.html">Form</a>
+        <a href="/dashboard.html">Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <h1>Response Dashboard</h1>
+      <p class="small">Only the form owner can view responses. Username + Password required.</p>
+
+      <label for="formId">Form ID</label>
+      <input id="formId" type="text" placeholder="Paste form ID here" />
+
+      <label for="ownerUser">Owner Username</label>
+      <input id="ownerUser" type="text" placeholder="Username used in builder" />
+
+      <label for="ownerPass">Owner Password</label>
+      <input id="ownerPass" type="password" placeholder="Password used in builder" />
+
+      <button id="loadBtn" class="secondary">Load Responses</button>
+      <button id="downloadBtn" class="secondary">Download XLSX</button>
+      <p id="msg" class="small"></p>
+    </div>
+
+    <div class="card">
+      <h2>Summary</h2>
+      <p>Total Responses: <span id="total" class="badge">0</span></p>
+      <p>Average Rating (if present): <span id="avg" class="badge">N/A</span></p>
+    </div>
+
+    <div class="card">
+      <h2>Responses</h2>
+      <label for="filterBox">Filter (search text)</label>
+      <input id="filterBox" type="text" placeholder="Type to filter rows" />
+      <div id="responses"></div>
+    </div>
+  </div>
+
+  <script>
+    const formIdInput = document.getElementById("formId");
+    const ownerUserInput = document.getElementById("ownerUser");
+    const ownerPassInput = document.getElementById("ownerPass");
+    const loadBtn = document.getElementById("loadBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const totalEl = document.getElementById("total");
+    const avgEl = document.getElementById("avg");
+    const responsesDiv = document.getElementById("responses");
+    const msg = document.getElementById("msg");
+    const filterBox = document.getElementById("filterBox");
+    let currentFields = [];
+    let allResponses = [];
+    let sortKey = "submittedAt";
+    let sortDir = "desc";
+
+    // If URL has ?id=...&ownerKey=..., prefill and auto-load
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get("id");
+    if (urlId) formIdInput.value = urlId;
+
+    loadBtn.addEventListener("click", () => {
+      const id = formIdInput.value.trim();
+      const ownerUser = ownerUserInput.value.trim();
+      const ownerPass = ownerPassInput.value.trim();
+      if (id && ownerUser && ownerPass) loadResponses(id, ownerUser, ownerPass);
+      else msg.textContent = "Please enter form ID, username, and password.";
+    });
+
+    filterBox.addEventListener("input", () => {
+      renderTable(allResponses);
+    });
+
+    downloadBtn.addEventListener("click", async () => {
+      const id = formIdInput.value.trim();
+      const ownerUser = ownerUserInput.value.trim();
+      const ownerPass = ownerPassInput.value.trim();
+      if (!id || !ownerUser || !ownerPass) {
+        msg.textContent = "Please enter form ID, username, and password.";
+        return;
+      }
+
+      try {
+        const params = new URLSearchParams();
+        if (ownerUser) params.append("ownerUser", ownerUser);
+        if (ownerPass) params.append("ownerPass", ownerPass);
+
+        const res = await fetch(`/responses/${id}/xlsx?${params.toString()}`);
+
+        if (res.status === 401) {
+          msg.textContent = "Owner username or password is incorrect.";
+          return;
+        }
+        if (!res.ok) {
+          msg.textContent = "Failed to download XLSX.";
+          return;
+        }
+
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "responses.xlsx";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        msg.textContent = "Error connecting to backend.";
+      }
+    });
+
+    async function loadResponses(id, ownerUser, ownerPass) {
+      responsesDiv.innerHTML = "";
+      msg.textContent = "";
+      totalEl.textContent = "0";
+      avgEl.textContent = "N/A";
+
+      try {
+        // Load form fields to build table columns
+        const formRes = await fetch(`/form/${id}`);
+        if (!formRes.ok) {
+          msg.textContent = "Form not found.";
+          return;
+        }
+        const form = await formRes.json();
+        currentFields = form.fields || [];
+
+        const params = new URLSearchParams();
+        params.append("ownerUser", ownerUser);
+        params.append("ownerPass", ownerPass);
+
+        const res = await fetch(`/responses/${id}?${params.toString()}`);
+        if (res.status === 401) {
+          msg.textContent = "Owner username or password is incorrect.";
+          return;
+        }
+        if (!res.ok) {
+          responsesDiv.textContent = "Failed to fetch responses.";
+          return;
+        }
+
+        const data = await res.json();
+        allResponses = data;
+        totalEl.textContent = data.length;
+
+        // Calculate average rating if a field named "rating" exists
+        const ratings = data
+          .map(r => r.responses && r.responses.rating)
+          .filter(v => typeof v === "number");
+
+        if (ratings.length > 0) {
+          const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+          avgEl.textContent = avg.toFixed(2);
+        }
+
+        if (data.length === 0) {
+          responsesDiv.textContent = "No responses yet.";
+          return;
+        }
+
+        renderTable(data);
+      } catch (err) {
+        responsesDiv.textContent = "Error connecting to backend.";
+      }
+    }
+
+    function safeKey(label) {
+      return String(label || "").replace(/\./g, "_").replace(/\$/g, "_");
+    }
+
+    function renderTable(data) {
+      const filterText = filterBox.value.trim().toLowerCase();
+      let filtered = data;
+      if (filterText) {
+        filtered = data.filter(item => {
+          const rowText = JSON.stringify(item.responses || {}).toLowerCase();
+          const timeText = (item.createdAt || "").toLowerCase();
+          return rowText.includes(filterText) || timeText.includes(filterText);
+        });
+      }
+
+      const sorted = [...filtered].sort((a, b) => compareRows(a, b));
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+
+      const thTime = document.createElement("th");
+      thTime.textContent = "Submitted At";
+      thTime.dataset.key = "submittedAt";
+      headerRow.appendChild(thTime);
+
+      currentFields.forEach(f => {
+        const th = document.createElement("th");
+        th.textContent = f.label;
+        th.dataset.key = f.label;
+        headerRow.appendChild(th);
+      });
+
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      sorted.forEach(item => {
+        const tr = document.createElement("tr");
+        const tdTime = document.createElement("td");
+        tdTime.textContent = item.createdAt ? new Date(item.createdAt).toLocaleString() : "";
+        tr.appendChild(tdTime);
+        currentFields.forEach(f => {
+          const td = document.createElement("td");
+          const key = safeKey(f.label);
+          const value = item.responses ? item.responses[key] : "";
+          td.textContent = formatValue(value);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      table.appendChild(tbody);
+      responsesDiv.innerHTML = "";
+      responsesDiv.appendChild(table);
+
+      // Add sorting behavior to headers
+      table.querySelectorAll("th").forEach(th => {
+        th.style.cursor = "pointer";
+        th.addEventListener("click", () => {
+          const key = th.dataset.key;
+          if (sortKey === key) {
+            sortDir = sortDir === "asc" ? "desc" : "asc";
+          } else {
+            sortKey = key;
+            sortDir = "asc";
+          }
+          renderTable(allResponses);
+        });
+      });
+    }
+
+    function compareRows(a, b) {
+      if (sortKey === "submittedAt") {
+        const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return sortDir === "asc" ? at - bt : bt - at;
+      }
+
+      const aVal = (a.responses && a.responses[safeKey(sortKey)]) || "";
+      const bVal = (b.responses && b.responses[safeKey(sortKey)]) || "";
+      const aNum = Number(aVal);
+      const bNum = Number(bVal);
+      if (!isNaN(aNum) && !isNaN(bNum)) {
+        return sortDir === "asc" ? aNum - bNum : bNum - aNum;
+      }
+      const aStr = String(formatValue(aVal)).toLowerCase();
+      const bStr = String(formatValue(bVal)).toLowerCase();
+      if (aStr < bStr) return sortDir === "asc" ? -1 : 1;
+      if (aStr > bStr) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    }
+
+    function formatValue(value) {
+      if (value === null || value === undefined) return "";
+      if (Array.isArray(value)) return value.join(", ");
+      if (typeof value === "object") return JSON.stringify(value);
+      return String(value);
+    }
+  </script>
+</body>
+</html>

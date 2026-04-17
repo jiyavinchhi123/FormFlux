@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="nav">
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <img src="FormFlux.png" alt="FormFlux logo" class="logo" />
+      </a>
+      <div class="nav-links">
+        <a href="form-builder.html">Builder</a>
+        <a href="form.html">Form</a>
+        <a href="dashboard.html">Dashboard</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="container dashboard-narrow">
+    <div class="header">
+      <h1>Response Dashboard</h1>
+      <p class="small">View responses and simple metrics.</p>
+    </div>
+
+    <div class="card">
+      <label>Owner Username</label>
+      <input id="ownerUser" type="text" placeholder="Enter username" />
+
+      <label>Owner Password</label>
+      <input id="ownerPass" type="password" placeholder="Enter password" />
+
+      <button id="loadBtn">Load Responses</button>
+      <button id="downloadBtn" class="secondary">Download XLSX</button>
+      <p id="message" class="small"></p>
+    </div>
+
+    <div class="card">
+      <div class="stats">
+        <div class="stat-card">
+          <h3>Total Responses</h3>
+          <p id="total">0</p>
+        </div>
+        <div class="stat-card">
+          <h3>Latest Submission</h3>
+          <p id="latest">-</p>
+        </div>
+        <div class="stat-card">
+          <h3>Avg Rating</h3>
+          <p id="avg">-</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Responses Table</h3>
+      <input id="filterBox" class="input-narrow" type="text" placeholder="Search responses..." />
+      <div class="table-wrap">
+        <table class="table" id="responseTable"></table>
+      </div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span>© 2026 FormFlux</span>
+    </div>
+  </footer>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const formId = params.get("id");
+
+    const ownerUser = document.getElementById("ownerUser");
+    const ownerPass = document.getElementById("ownerPass");
+    const loadBtn = document.getElementById("loadBtn");
+    const downloadBtn = document.getElementById("downloadBtn");
+    const message = document.getElementById("message");
+
+    const totalEl = document.getElementById("total");
+    const latestEl = document.getElementById("latest");
+    const avgEl = document.getElementById("avg");
+    const table = document.getElementById("responseTable");
+    const filterBox = document.getElementById("filterBox");
+    let allResponses = [];
+
+    async function loadResponses() {
+      if (!formId) {
+        message.textContent = "Form ID not found in URL.";
+        return;
+      }
+
+      try {
+        const res = await fetch(`http://localhost:8080/responses/${formId}?ownerUser=${encodeURIComponent(ownerUser.value)}&ownerPass=${encodeURIComponent(ownerPass.value)}`);
+        if (!res.ok) {
+          message.textContent = "Failed to fetch responses.";
+          return;
+        }
+
+        const data = await res.json();
+        allResponses = data;
+        totalEl.textContent = data.length;
+
+        if (data.length > 0) {
+          latestEl.textContent = new Date(data[data.length - 1].createdAt).toLocaleString();
+        }
+
+        // Average rating if field named "Rating" exists
+        const ratings = data.map(r => r.responses?.Rating).filter(v => typeof v === "number");
+        if (ratings.length > 0) {
+          const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+          avgEl.textContent = avg.toFixed(1);
+        }
+
+        renderTable(data);
+      } catch (err) {
+        message.textContent = "Error connecting to backend.";
+      }
+    }
+
+    filterBox.addEventListener("input", () => {
+      renderTable(allResponses);
+    });
+
+    function renderTable(data) {
+      if (data.length === 0) {
+        table.innerHTML = "<tr><td>No responses yet.</td></tr>";
+        return;
+      }
+
+      const filterText = filterBox.value.trim().toLowerCase();
+      let filtered = data;
+      if (filterText) {
+        filtered = data.filter(item => {
+          const rowText = JSON.stringify(item.responses || {}).toLowerCase();
+          const timeText = (item.createdAt || "").toLowerCase();
+          return rowText.includes(filterText) || timeText.includes(filterText);
+        });
+      }
+
+      if (filtered.length === 0) {
+        table.innerHTML = "<tr><td>No matches found.</td></tr>";
+        return;
+      }
+
+      const headers = Object.keys(filtered[0].responses || {});
+      let html = "<tr><th>Submitted At</th>";
+      headers.forEach(h => html += `<th>${h}</th>`);
+      html += "</tr>";
+
+      filtered.forEach(item => {
+        html += `<tr><td>${new Date(item.createdAt).toLocaleString()}</td>`;
+        headers.forEach(h => {
+          html += `<td>${item.responses[h] ?? ""}</td>`;
+        });
+        html += "</tr>";
+      });
+
+      table.innerHTML = html;
+    }
+
+    loadBtn.addEventListener("click", loadResponses);
+
+    downloadBtn.addEventListener("click", async () => {
+      if (!formId) {
+        message.textContent = "Form ID not found in URL.";
+        return;
+      }
+      if (!ownerUser.value || !ownerPass.value) {
+        message.textContent = "Please enter username and password.";
+        return;
+      }
+
+      try {
+        const url = `http://localhost:8080/responses/${formId}/xlsx?ownerUser=${encodeURIComponent(ownerUser.value)}&ownerPass=${encodeURIComponent(ownerPass.value)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          message.textContent = "Failed to download XLSX.";
+          return;
+        }
+        const blob = await res.blob();
+        const link = document.createElement("a");
+        link.href = window.URL.createObjectURL(blob);
+        link.download = "responses.xlsx";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (err) {
+        message.textContent = "Error connecting to backend.";
+      }
+    });
+  </script>
+</body>
+</html>
